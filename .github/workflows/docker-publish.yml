@@ -34,4 +34,4 @@ jobs:
         with:
           push: true
           tags: '${{ secrets.DOCKERHUB_USERNAME }}/eye:${{ github.sha }},${{ secrets.DOCKERHUB_USERNAME }}/eye:latest'
-          file: ./Dockerfile
+          file: ./dockerfile
