@@ -1,6 +1,7 @@
 import datetime
 
 from django.http import JsonResponse
+from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
@@ -9,54 +10,10 @@ from rest_framework.permissions import AllowAny
 from .models import AdminModel, ClientModel, ScreenshotModel, DailyActivity, WeeklyActivity
 from .serializers import AdminModelSerializer, ClientModelSerializer, ResponseDailyActivitySerializer, \
     WeeklyActivitySerializer, ResponseClientSerializer
-import threading
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework import status
-from io import BytesIO
-from PIL import ImageGrab
-import time
-import firebase_admin
-from firebase_admin import credentials, storage
-from django.utils import timezone
 from django.utils.dateparse import parse_date
-
-running = False
-if not firebase_admin._apps:
-    cred = credentials.Certificate("eyedesk-43706-firebase-adminsdk-qo8r1-6f48d8812a.json")
-    firebase_admin.initialize_app(cred, {'storageBucket': 'eyedesk-43706.appspot.com'})
-bucket = storage.bucket()
-client_id = None
-timer = None
-
-
-def capture_screenshots():
-    global running
-    # interval = 10 * 60  # 10 minutes
-    interval = 10
-    while running:
-        try:
-            screenshot = ImageGrab.grab()
-            screenshot_bytes = BytesIO()
-            screenshot.save(screenshot_bytes, format='PNG')
-            screenshot_bytes.seek(0)
-            destination_blob_name = str(client_id) + "/screenshot_{0}.png".format(time.time())
-            blob = bucket.blob(destination_blob_name)
-            blob.upload_from_file(screenshot_bytes, content_type='image/png')
-            # Set expiration time to a very large value (e.g., 10 years from now)
-            expiration = datetime.datetime.now() + datetime.timedelta(days=365 * 100)
-            url = blob.generate_signed_url(expiration=expiration, version='v2')
-            print("File uploaded successfully. URL:", url)
-            screenshot_data = {
-                'client_id': client_id,
-                'url': url,
-                'date': timezone.now().date(),
-                'time': timezone.now().time()
-            }
-            ScreenshotModel.objects.create(**screenshot_data)
-            time.sleep(interval)
-        except KeyboardInterrupt:
-            break
 
 
 @swagger_auto_schema(
@@ -106,7 +63,7 @@ def signin(request):
     try:
         admin = AdminModel.objects.get(emailId=email, password=password)
         serializer = AdminModelSerializer(admin)
-        return Response(serializer.data)
+        return Response(serializer.data, status=status.HTTP_200_OK)
     except AdminModel.DoesNotExist:
         return Response({"error": "Invalid email or password"}, status=status.HTTP_404_NOT_FOUND)
 
@@ -163,75 +120,6 @@ def login(request):
         return Response(serializer.data)
     except ClientModel.DoesNotExist:
         return Response({"error": "Invalid email or password"}, status=status.HTTP_404_NOT_FOUND)
-
-
-@swagger_auto_schema(method='post', request_body=openapi.Schema(
-    type=openapi.TYPE_OBJECT,
-    properties={
-        'id': openapi.Schema(type=openapi.TYPE_INTEGER, description='ID of the Client'),
-    }
-))
-@api_view(['POST'])
-def start_activity(request):
-    global running, client_id, timer
-    if not running:
-        client_id = request.data.get('id')
-        try:
-            ClientModel.objects.get(pk=client_id)
-            running = True
-            timer = datetime.datetime.now()
-            screenshots_thread = threading.Thread(target=capture_screenshots)
-            screenshots_thread.start()
-            return Response({'message': 'Screenshot capturing started'}, status=status.HTTP_200_OK)
-        except:
-            return Response({'message': 'Client Id Does not exist'},
-                            status=status.HTTP_404_NOT_FOUND)
-    else:
-        return Response({'message': 'Screenshot capturing is already in progress'}, status=status.HTTP_400_BAD_REQUEST)
-
-
-@swagger_auto_schema(
-    method='post',
-    request_body=openapi.Schema(
-        type=openapi.TYPE_OBJECT,
-        required=['client_id', 'focus_percentage'],
-        properties={
-            'client_id': openapi.Schema(type=openapi.TYPE_INTEGER, description='ID of the Client'),
-            'focus_percentage': openapi.Schema(type=openapi.TYPE_NUMBER, format=openapi.FORMAT_DOUBLE)
-        },
-    ),
-    responses={
-        200: openapi.Response(description='Screenshot capturing stopped'),
-        400: "Bad Request: If the screenshot capturing is not in progress or if required parameters are missing."
-    }
-)
-@csrf_exempt
-@api_view(['POST'])
-def stop_activity(request):
-    global running, timer
-    if request.method == 'POST':
-        request_data = request.data
-        client_id = request_data.get('client_id')
-        focus_percentage = request_data.get('focus_percentage')
-        if client_id is None or focus_percentage is None:
-            return Response({'error': 'client_id and focus_percentage are required'},
-                            status=status.HTTP_400_BAD_REQUEST)
-        if running:
-            running = False
-            duration_seconds = (datetime.datetime.now() - timer).total_seconds()
-            duration_hours = duration_seconds / 3600
-            try:
-                DailyActivity.create_or_update(datetime.date.today(), focus_percentage, duration_hours,
-                                               ClientModel.objects.get(pk=client_id))
-                WeeklyActivity.calculate_weekly_activity(ClientModel.objects.get(pk=client_id))
-                return Response({'message': 'Screenshot capturing stopped'}, status=status.HTTP_200_OK)
-            except Exception as e:
-                return Response({'message': 'Client Not Found'},
-                                status=status.HTTP_404_NOT_FOUND)
-        else:
-            return Response({'message': 'Screenshot capturing is not in progress'}, status=status.HTTP_400_BAD_REQUEST)
-    else:
-        return Response({'error': 'Only POST requests are allowed'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
 
 @swagger_auto_schema(
@@ -407,11 +295,8 @@ def get_reports(request):
             'dailyActivity': daily_data,
             'screenshots': screenshots_map
         })
-
-    # Retrieve data from stored weekly activity
     weekly_serializer = WeeklyActivitySerializer(stored_weekly_activity)
     weekly_data = weekly_serializer.data
-
     return JsonResponse({
         'screenshots_data': screenshots_data,
         'weeksActivity': weekly_data.get('weeksActivity', 0),
@@ -463,7 +348,6 @@ def get_daily_reports(request):
     if not (from_date and to_date and client_id):
         return JsonResponse({'error': 'from_date, to_date, and client_id are required parameters'},
                             status=status.HTTP_400_BAD_REQUEST)
-
     try:
         from_date = parse_date(from_date)
         to_date = parse_date(to_date)
@@ -472,13 +356,10 @@ def get_daily_reports(request):
 
     if from_date is None or to_date is None:
         return JsonResponse({'error': 'Invalid date value'}, status=status.HTTP_400_BAD_REQUEST)
-
     screenshots_data = []
     date_range = range((to_date - from_date).days + 1)
-
     for i in date_range:
         current_date = from_date + datetime.timedelta(days=i)
-
         try:
             screenshots = ScreenshotModel.objects.filter(date=current_date, client_id=client_id)
         except ScreenshotModel.DoesNotExist:
@@ -507,7 +388,29 @@ def get_daily_reports(request):
     }, status=status.HTTP_200_OK)
 
 
+@swagger_auto_schema(
+    method='get',
+    manual_parameters=[
+        openapi.Parameter('date', openapi.IN_QUERY, type=openapi.TYPE_STRING,
+                          description='Date (YYYY-MM-DD)', required=True),
+        openapi.Parameter('client_id', openapi.IN_QUERY, type=openapi.TYPE_INTEGER, description='Client ID',
+                          required=True)
+    ]
+)
 @api_view(['GET'])
-def hello_world(request):
-    data = {'message': 'Hello, world!'}
-    return Response(data)
+@csrf_exempt
+def get_daily_hours(request):
+    date_str = request.query_params.get('date')
+    cli_id = request.query_params.get('client_id')
+    try:
+        date = parse_date(date_str)
+        daily_activity = get_object_or_404(DailyActivity, client_id=cli_id, date=date)
+        daily_hours = daily_activity.dailyHours
+        print(daily_hours)
+        hours = int(daily_hours)
+        minutes = int((daily_hours - hours) * 60)
+        seconds = int(((daily_hours - hours) * 60 - minutes) * 60)
+        daily_hours_formatted = "{:02}:{:02}:{:02}".format(hours, minutes, seconds)
+        return JsonResponse({'dailyHours': daily_hours_formatted})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
