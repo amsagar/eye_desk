@@ -50,7 +50,7 @@ class ResponseWeeklyActivitySerializer(serializers.ModelSerializer):
         fields = ('weeksActivity', 'activityHours', 'weekEarned')
 
 
-class ClientSerializer(serializers.ModelSerializer):
+class ResponseClientSerializer(serializers.ModelSerializer):
     class Meta:
         model = ClientModel
         fields = ['id', 'fullName', 'emailId', 'salary']

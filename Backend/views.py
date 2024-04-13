@@ -1,13 +1,16 @@
 import datetime
 
 from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
+from rest_framework.permissions import AllowAny
+
 from .models import AdminModel, ClientModel, ScreenshotModel, DailyActivity, WeeklyActivity
 from .serializers import AdminModelSerializer, ClientModelSerializer, ResponseDailyActivitySerializer, \
-    WeeklyActivitySerializer, ClientSerializer
+    WeeklyActivitySerializer, ResponseClientSerializer
 import threading
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework import status
 from io import BytesIO
@@ -64,6 +67,7 @@ def capture_screenshots():
         status.HTTP_400_BAD_REQUEST: "Invalid request data"
     }
 )
+@csrf_exempt
 @api_view(['POST'])
 def signup(request):
     serializer = AdminModelSerializer(data=request.data)
@@ -94,6 +98,7 @@ def signup(request):
         404: "Invalid email or password"
     }
 )
+@csrf_exempt
 @api_view(['POST'])
 def signin(request):
     email = request.data.get('emailId')
@@ -108,18 +113,13 @@ def signin(request):
 
 @swagger_auto_schema(
     method='post',
-    request_body=openapi.Schema(
-        type=openapi.TYPE_OBJECT,
-        properties={
-            'name': openapi.Schema(type=openapi.TYPE_STRING),
-            'age': openapi.Schema(type=openapi.TYPE_INTEGER),
-        }
-    ),
+    request_body=ClientModelSerializer,
     responses={
         status.HTTP_201_CREATED: ClientModelSerializer(),
         status.HTTP_400_BAD_REQUEST: "Invalid Input"
     }
 )
+@csrf_exempt
 @api_view(['POST'])
 def createclient(request):
     serializer = ClientModelSerializer(data=request.data)
@@ -152,6 +152,7 @@ def createclient(request):
         )
     }
 )
+@csrf_exempt
 @api_view(['POST'])
 def login(request):
     email = request.data.get('emailId')
@@ -204,6 +205,7 @@ def start_activity(request):
         400: "Bad Request: If the screenshot capturing is not in progress or if required parameters are missing."
     }
 )
+@csrf_exempt
 @api_view(['POST'])
 def stop_activity(request):
     global running, timer
@@ -260,6 +262,7 @@ def stop_activity(request):
         400: "Bad Request: If required parameters are missing or invalid."
     }
 )
+@csrf_exempt
 @api_view(['GET'])
 def get_screenshots(request):
     date = request.query_params.get('date')
@@ -323,10 +326,12 @@ def get_screenshots(request):
         400: "Bad Request."
     }
 )
+@csrf_exempt
 @api_view(['GET'])
+@permission_classes([AllowAny])
 def client_list(request):
     clients = ClientModel.objects.all()
-    serializer = ClientSerializer(clients, many=True)
+    serializer = ResponseClientSerializer(clients, many=True)
     return Response(serializer.data)
 
 
@@ -347,6 +352,7 @@ def client_list(request):
     },
     operation_description="Retrieve screenshots and activity data for a client within a date range."
 )
+@csrf_exempt
 @api_view(['GET'])
 def get_reports(request):
     from_date = request.query_params.get('from_date')
@@ -447,6 +453,7 @@ def get_reports(request):
     },
     operation_description="Retrieve screenshots and daily activity data for a client within a date range."
 )
+@csrf_exempt
 @api_view(['GET'])
 def get_daily_reports(request):
     from_date = request.query_params.get('from_date')
@@ -498,3 +505,9 @@ def get_daily_reports(request):
     return JsonResponse({
         'screenshots_data': screenshots_data,
     }, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+def hello_world(request):
+    data = {'message': 'Hello, world!'}
+    return Response(data)

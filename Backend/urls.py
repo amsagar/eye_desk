@@ -29,5 +29,6 @@ urlpatterns = [
     path('getScreenshots/', views.get_screenshots, name='get_screenshots'),
     path('getClients/', views.client_list, name='get_clients'),
     path('getWeeklyReports/', views.get_reports, name='get_weekly_reports'),
-    path('getDailyReports/', views.get_daily_reports, name='get_daily_reports')
+    path('getDailyReports/', views.get_daily_reports, name='get_daily_reports'),
+    path('', views.hello_world, name='hello_world')
 ]

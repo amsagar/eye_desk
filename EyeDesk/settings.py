@@ -38,7 +38,19 @@ INSTALLED_APPS = [
     'Backend',
     'drf_yasg'
 ]
-
+CSRF_TRUSTED_ORIGINS = ['http://*', 'https://*']
+CORS_ORIGIN_ALLOW_ALL = True
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        # Remove any authentication classes that require authentication
+        # 'rest_framework.authentication.SessionAuthentication',
+        # 'rest_framework.authentication.TokenAuthentication',
+    ],
+    # Optionally, you can set permissions to allow any request
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.AllowAny',
+    ]
+}
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',

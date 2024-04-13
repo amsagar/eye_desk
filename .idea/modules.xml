@@ -3,6 +3,7 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/eyedesk.iml" filepath="$PROJECT_DIR$/.idea/eyedesk.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../eyedesk-cli/.idea/eyedesk-cli.iml" filepath="$PROJECT_DIR$/../eyedesk-cli/.idea/eyedesk-cli.iml" />
     </modules>
   </component>
 </project>
