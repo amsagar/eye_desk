@@ -20,7 +20,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
       - name: Build Docker image
-        run: docker build -t your-docker-hub-username/your-image-name:latest .
+        run: docker build -t amsagarpatil/eyedesktop:latest .
 
       - name: Push Docker image
-        run: docker push your-docker-hub-username/your-image-name:latest
+        run: docker push amsagarpatil/eyedesktop:latest
