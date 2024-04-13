@@ -54,3 +54,9 @@ class ResponseClientSerializer(serializers.ModelSerializer):
     class Meta:
         model = ClientModel
         fields = ['id', 'fullName', 'emailId', 'salary']
+
+
+class ScreenshotSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ScreenshotModel
+        fields = ['client', 'url', 'date', 'time']

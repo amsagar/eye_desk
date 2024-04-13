@@ -1,15 +1,17 @@
 import datetime
-
+from datetime import datetime
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework.permissions import AllowAny
+from django.utils.dateparse import parse_duration
 
 from .models import AdminModel, ClientModel, ScreenshotModel, DailyActivity, WeeklyActivity
 from .serializers import AdminModelSerializer, ClientModelSerializer, ResponseDailyActivitySerializer, \
-    WeeklyActivitySerializer, ResponseClientSerializer
+    WeeklyActivitySerializer, ResponseClientSerializer, DailyActivitySerializer, ScreenshotSerializer
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework import status
@@ -406,11 +408,67 @@ def get_daily_hours(request):
         date = parse_date(date_str)
         daily_activity = get_object_or_404(DailyActivity, client_id=cli_id, date=date)
         daily_hours = daily_activity.dailyHours
-        print(daily_hours)
-        hours = int(daily_hours)
-        minutes = int((daily_hours - hours) * 60)
-        seconds = int(((daily_hours - hours) * 60 - minutes) * 60)
+        hours = daily_hours.seconds // 3600
+        minutes = (daily_hours.seconds % 3600) // 60
+        seconds = daily_hours.seconds % 60
         daily_hours_formatted = "{:02}:{:02}:{:02}".format(hours, minutes, seconds)
         return JsonResponse({'dailyHours': daily_hours_formatted})
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=400)
+
+
+@swagger_auto_schema(
+    method='post',
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=['client', 'date', 'dailyActivity', 'dailyHours'],
+        properties={
+            'client': openapi.Schema(type=openapi.TYPE_INTEGER, description='Client ID'),
+            'date': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATE,
+                                   description='Date in YYYY-MM-DD format'),
+            'dailyActivity': openapi.Schema(type=openapi.TYPE_NUMBER, description='Daily activity value'),
+            'dailyHours': openapi.Schema(type=openapi.TYPE_STRING, description='Duration in HH:MM:SS format'),
+        },
+    ),
+    responses={status.HTTP_201_CREATED: 'Data created or updated successfully'},
+    operation_description='Create or update daily activity data for a client'
+)
+@api_view(['POST'])
+@csrf_exempt
+def create_or_update_daily_activity(request):
+    client_id = request.data.get('client')
+    date = request.data.get('date')
+    activity = request.data.get('dailyActivity')
+    hours_str = request.data.get('dailyHours')  # Assuming duration is sent as string
+    try:
+        client = ClientModel.objects.get(id=client_id)
+    except ClientModel.DoesNotExist:
+        return Response({'error': 'Client does not exist'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Convert duration string to duration object
+    try:
+        hours = parse_duration(hours_str)
+    except ValueError:
+        return Response({'error': 'Invalid duration format'}, status=status.HTTP_400_BAD_REQUEST)
+
+    DailyActivity.create_or_update(date=date, daily_activity=activity, daily_hours=hours, client=client)
+    return Response({'message': 'Data created or updated successfully'}, status=status.HTTP_201_CREATED)
+
+
+@swagger_auto_schema(method='post', request_body=ScreenshotSerializer, responses={201: 'Created', 400: 'Bad Request'})
+@api_view(['POST'])
+@csrf_exempt
+def create_screenshot(request):
+    if request.method == 'POST':
+        time_str = request.data.get('time')
+        if time_str:
+            try:
+                ttime_obj = timezone.datetime.strptime(time_str, "%H:%M:%S.%f").time()
+                request.data['time'] = ttime_obj
+            except ValueError:
+                return Response({"error": "Invalid time format. Use HH:MM AM/PM."}, status=status.HTTP_400_BAD_REQUEST)
+        serializer = ScreenshotSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

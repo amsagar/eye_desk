@@ -28,5 +28,7 @@ urlpatterns = [
     path('getClients/', views.client_list, name='get_clients'),
     path('getWeeklyReports/', views.get_reports, name='get_weekly_reports'),
     path('getDailyReports/', views.get_daily_reports, name='get_daily_reports'),
-    path('getdailyhours/', views.get_daily_hours, name='get_daily_hours')
+    path('getdailyhours/', views.get_daily_hours, name='get_daily_hours'),
+    path('dailyUpdate/', views.create_or_update_daily_activity, name='dailyUpdate'),
+    path('screenshotUpdate/', views.create_screenshot, name='screenshotUpdate')
 ]
