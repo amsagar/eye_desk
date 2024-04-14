@@ -1,5 +1,4 @@
 import datetime
-from datetime import datetime
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -252,29 +251,24 @@ def get_reports(request):
     if not (from_date and to_date and client_id):
         return JsonResponse({'error': 'from_date, to_date, and client_id are required parameters'},
                             status=status.HTTP_400_BAD_REQUEST)
-
     try:
         from_date = parse_date(from_date)
         to_date = parse_date(to_date)
     except ValueError:
         return JsonResponse({'error': 'Invalid date format'}, status=status.HTTP_400_BAD_REQUEST)
-
     if from_date is None or to_date is None:
         return JsonResponse({'error': 'Invalid date value'}, status=status.HTTP_400_BAD_REQUEST)
-
     # Check if start and end dates match stored data
     stored_weekly_activity = WeeklyActivity.objects.filter(client_id=client_id, startDate=from_date,
                                                            endDate=to_date).first()
     if not stored_weekly_activity:
         return JsonResponse({'error': 'No weekly activity found for the given date range and client_id'},
                             status=status.HTTP_400_BAD_REQUEST)
-
     screenshots_data = []
     date_range = range((to_date - from_date).days + 1)
-
     for i in date_range:
+        print(i)
         current_date = from_date + datetime.timedelta(days=i)
-
         try:
             screenshots = ScreenshotModel.objects.filter(date=current_date, client_id=client_id)
         except ScreenshotModel.DoesNotExist:
@@ -439,19 +433,17 @@ def create_or_update_daily_activity(request):
     client_id = request.data.get('client')
     date = request.data.get('date')
     activity = request.data.get('dailyActivity')
-    hours_str = request.data.get('dailyHours')  # Assuming duration is sent as string
+    hours_str = request.data.get('dailyHours')
     try:
         client = ClientModel.objects.get(id=client_id)
     except ClientModel.DoesNotExist:
         return Response({'error': 'Client does not exist'}, status=status.HTTP_400_BAD_REQUEST)
-
-    # Convert duration string to duration object
     try:
         hours = parse_duration(hours_str)
     except ValueError:
         return Response({'error': 'Invalid duration format'}, status=status.HTTP_400_BAD_REQUEST)
-
     DailyActivity.create_or_update(date=date, daily_activity=activity, daily_hours=hours, client=client)
+    WeeklyActivity.calculate_weekly_activity(client)
     return Response({'message': 'Data created or updated successfully'}, status=status.HTTP_201_CREATED)
 
 
