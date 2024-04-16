@@ -1,4 +1,6 @@
 import datetime
+
+from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -165,15 +167,8 @@ def get_screenshots(request):
         return JsonResponse({'error': 'Invalid date format'}, status=status.HTTP_400_BAD_REQUEST)
     if date is None:
         return JsonResponse({'error': 'Invalid date value'}, status=status.HTTP_400_BAD_REQUEST)
-    try:
-        screenshots = ScreenshotModel.objects.filter(date=date, client_id=client_id)
-    except ScreenshotModel.DoesNotExist:
-        return JsonResponse({'error': 'No screenshots found for the given date and client_id'},
-                            status=status.HTTP_404_NOT_FOUND)
-    screenshots_map = {}
-    for screenshot in screenshots:
-        time_12hr_format = screenshot.time.strftime('%I:%M %p')
-        screenshots_map[str(time_12hr_format)] = screenshot.url
+    screenshots = ScreenshotModel.objects.filter(date=date, client_id=client_id)
+    screenshots_map = {screenshot.time.strftime('%I:%M %p'): screenshot.url for screenshot in screenshots}
     try:
         daily_activity = DailyActivity.objects.get(date=date, client_id=client_id)
     except DailyActivity.DoesNotExist:
@@ -182,19 +177,24 @@ def get_screenshots(request):
     daily_serializer = ResponseDailyActivitySerializer(daily_activity)
     daily_data = daily_serializer.data
     try:
-        weekly_activity = WeeklyActivity.objects.get(client_id=client_id)
-    except WeeklyActivity.DoesNotExist:
-        return JsonResponse({'error': 'No weekly activity found for the given client_id'},
-                            status=status.HTTP_404_NOT_FOUND)
-    weekly_serializer = WeeklyActivitySerializer(weekly_activity)
-    weekly_data = weekly_serializer.data
-    return Response({
+        weekly_activity = WeeklyActivity.objects.filter(
+            Q(client_id=client_id) & Q(startDate__lte=date) & Q(endDate__gte=date)
+        ).first()
+        if weekly_activity is None:
+            return JsonResponse({'error': 'No weekly activity found for the given client_id and date'},
+                                status=status.HTTP_404_NOT_FOUND)
+        weekly_serializer = WeeklyActivitySerializer(weekly_activity)
+        weekly_data = weekly_serializer.data
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    response_data = {
         'dailyActivity': daily_data,
         'weeksActivity': weekly_data.get('weeksActivity', 0),
         'activityHours': weekly_data.get('activityHours', 0),
         'weekEarned': weekly_data.get('weekEarned', 0),
         'screenshots': screenshots_map
-    }, status=status.HTTP_200_OK)
+    }
+    return JsonResponse(response_data, status=status.HTTP_200_OK)
 
 
 @swagger_auto_schema(
